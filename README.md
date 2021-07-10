@@ -1,104 +1,27 @@
 # SRNet
-**Update** (27th August 2020) :
+## Introduction
 
-A bug related to variable image size is fixed. You can now train with variable image sizes. This will improve generations significantly. 
+Adapted from [Youdao AI](https://github.com/youdao-ai/SRNet), the project is intended to transfer the text style from one image background to another image background. In particular, we would like to generate novel samples based on the existing samples by editing the contents in the image, in order to improve the accuracy of OCR model. The language on the image is Thai, which is relatively scarce in the real world.
 
-Training is now significantly faster. 
-Pull all changes and train as usual.  
+Original paper: [Editing Text in the wild](https://arxiv.org/abs/1908.03047) by Liang Wu, Chengquan Zhang, Jiaming Liu, Junyu Han, Jingtuo Liu, Errui Ding and Xiang Bai.
 
-**Update** (26th July 2020) : 
-* Pre-trained weights have been uploaded. Please refer to the *Pre-trained weights* section for usage. 
+## Data Preparation
 
-* The latest commit makes a few modifications to the model. Pull all changes before using the pre-trained weights.
+- Extract Background Images: Randomly choose 100 real images, remove their texts on the images manually to get 100 background images.
 
----
+- Prepare Thai Name Dataset: Prepare a dataset that contains common Thai family names, surnames, and all names are categorized into male names and female names. The Thai name corpus we used is from this [repository](https://github.com/korkeatw/thai-names-corpus).
 
-This repository presents SRNet ([Liang Wu et al](https://arxiv.org/pdf/1908.03047.pdf)), a neural network that tackles the problem of text editing in images. It marks the inception of an area of research that could automate advanced editing mechanisms in the future. 
+- Training Set for GAN: Run [`datagen.py`](https://github.com/infinityglow/SRNet/blob/master/SRNet-Datagen/datagen.py) to generate as many artificial compound images as you want. There are two configuration file, [one](https://github.com/infinityglow/SRNet/blob/master/SRNet-Datagen/cfg.py) is to specify the number of training samples and saving directories, [another](https://github.com/infinityglow/SRNet/blob/master/SRNet-Datagen/Synthtext/data_cfg.py) config is to adapt the parameters of generated images, such as width, height, image variations, etc.
 
+## Training
 
-SRNet is a twin discriminator generative adversarial network that can edit text in any image while maintaining context of the background, font style and color. The demo below showcases one such use case. Movie poster editing.
+The training script is [train.py](https://github.com/infinityglow/SRNet/blob/master/train.py). The configuration for GAN training is from [cfg.py](https://github.com/infinityglow/SRNet/blob/master/cfg.py) to adapt the hyperparameters, e.g., learning rate, batch size, input shape, etc. After 50,000 epochs for training 50,000 training images, the model will eventually converge and the model parameters file will be saved in `./log/params.model`.
 
-![](media/final.gif)
+## Genaration
 
-L - Source ; R - Modified
+After training a model, we can generate novel images by running [`test.py`](https://github.com/infinityglow/SRNet/blob/master/test.py), and the final generated images are listed in the directory [`./test/output`](https://github.com/infinityglow/SRNet/tree/master/test/output). The input file we should feed into the model is in the directory [`./test/input`](https://github.com/infinityglow/SRNet/tree/master/test/input).
 
-----
-### Architecture changes
-
-This implementation of SRNet introduces two main changes. 
-
-1. **Training**: The original SRNet suffers from instability. The generator loss belies the instability that occurs during training. This imbalance affects skeleton (t_sk) generation the maximum. The effect manifests when the generator produces a sequence of *bad* t_sk generations, however instead of bouncing back, it grows worse and finally leads to mode collapse. The culprit here is the min-max loss. A textbook method to solve this problem is to let the discriminator always be ahead of the generator. The same was employed in this implementation.
-
-
-2. **Generator**: In order to accomodate for a design constraint in the original net, I have added three extra convolution layers in the *decoder_net*.
-
-Incorporating these changes improved t_sk generations dramatically and increased stability. However, this also increased training time by ~15%. 
-
-----
-## Usage
-
-A virtual environment is the most convenient way to setup the model for training or inference. You can use *virtualenv* for this. The rest of this guide assumes that you are in one.
-
-- Clone this repository:
-    ```bash
-    $ git clone https://github.com/Niwhskal/SRNet.git
-
-    $ cd SRNet
-    ```
-- Install requirements (Make sure you are on python3.xx):
-    ```bash
-    $ pip3 install -r requirements.txt
-    ```
-### Data setup
-
-This repository provides you with a bash script that circumvents the process of synthesizing the data manually as the original implementation does. The default [configuration parameters](https://github.com/Niwhskal/SRNet/blob/582749370e356cb32396152f6078e1150b91212e/SRNet-Datagen/Synthtext/data_cfg.py#L10) set's up a dataset that is sufficient to train a robust model.
-
-- Grant execute permission to the bash script:
-    ```bash
-    $ chmod +x data_script.sh
-    ```
-- Setup training data by executing:
-    ```bash
-    $ ./data_script.sh
-    ```
-The bash script downloads background data and a word list, it then runs a datagenerator script that synthesizes training data. Finally, it modifies paths to enable straightforward training. A detailed description of data synthesis is provided by [youdao-ai](https://github.com/youdao-ai/SRNet-Datagen) in his original datagenerator repository. 
-
-If you wish to synthesize data with different fonts, you could do so easily by adding custom *.ttf* files to the fonts directory before running `datagen.py`. Examine the flow of `data_script.sh` and change it accordingly.
-
-### Training
-
-- Once data is setup, you can immediately begin training:
-    ```bash
-    $ python3 train.py
-    ```
-If you wish to resume training or use a checkpoint, update it's [path](https://github.com/Niwhskal/SRNet/blob/9f7b34d4bdffa3951912ac739c22997a66a1ad0a/cfg.py#L24) and run `train.py`
-
-If you are interested in experimenting, modify hyperparameters accordingly in `cfg.py`
-
-### Prediction
-
-In order to predict, you will need to provide a pair of inputs (The source *i_s* and the custom text rendered on a plain background in grayscale (i_t) -examples can be found in `SRNet/custom_feed/labels`-). Place all such pairs in a folder.  
-
-- Inference can be carried out by running:
-    ```bash
-    $ python3 predict.py --input_dir *data_dir* --save_dir *destination_dir* --checkpoint *path_to_ckpt*
-    ```
-
-### Pre-trained weights
-
-You can download my pre-trained weights [here](https://drive.google.com/file/d/1UiLOywNnlCiyT6MPQ5YvIKw4XxYf93El/view?usp=sharing).
-
-Some results from the example directory:
-
-Source     |      Result
-:-------------------------:|:-------------------------:
-
-![](media/pre-trained_result.png)
-
-
-## Demo
-
-Code for the demo is hastily written and is quite slow. If anyone is interested in trying it out or would like to contribute to it, open an issue, submit a pull request or send me an email at `lakshwin045@gmail.com`. I can host it for you. 
+![effect](https://github.com/infinityglow/SRNet/blob/master/test/output/effect.png)
 
 ## References
 
